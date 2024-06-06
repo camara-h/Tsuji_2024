@@ -1,0 +1,137 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+ university union
+ ---
+title: "R Notebook"
+output: html_notebook
+knit:
+  opts_knit:
+    root.dir: "U:/USERS/CamaraH/Projects/Opn3_scRNAseq_analysis/Emont_2022/mouse"
+---
+
+
+```{r setup}
+# Load libraries
+library(SingleCellExperiment)
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+library(scales)
+library(cowplot)
+library(RCurl)
+library(stringr)
+library(RColorBrewer)
+library(ggplot2)
+library(ggpubr)
+```
+
+###Create SeratObject
+```{r}
+#The object was created from 
+# Mm10X.data.barcodes.tsv.gz	Cell barcodes for mouse adipose single-nucleus normalized expression data	- https://singlecell.broadinstitute.org/single_cell/data/public/SCP1376/a-single-cell-atlas-of-human-and-mouse-white-adipose-tissue?filename=Mm10X.data.barcodes.tsv.gz		
+# Mm10X.data.features.tsv.gz	Features for mouse adipose single-nucleus normalized expression data		- https://singlecell.broadinstitute.org/single_cell/data/public/SCP1376/a-single-cell-atlas-of-human-and-mouse-white-adipose-tissue?filename=Mm10X.data.features.tsv.gz	
+# Mm10X.data.mtx.gz	Mouse adipose single-nucleus normalized expression data -https://singlecell.broadinstitute.org/single_cell/data/public/SCP1376/a-single-cell-atlas-of-human-and-mouse-white-adipose-tissue?filename=Mm10X.data.mtx.gz
+#Data was stored in a single folder named 10x_norm_data
+
+ctrl_counts <- Read10X(data.dir = "10x_norm_data")
+# Turn count matrix into a Seurat object (output is a Seurat object)
+ctrl <- CreateSeuratObject(counts = ctrl_counts)
+barcodes <- rownames(ctrl@meta.data)
+```
+
+
+```{r}
+###Checking the normal metadata
+all(barcodes %in% rownames(ctrl@meta.data))
+all(rownames(ctrl@meta.data) == barcodes)
+names(ctrl@meta.data)
+```
+
+###Add metadata
+```{r}
+#metadata - https://singlecell.broadinstitute.org/single_cell/data/public/SCP1376/a-single-cell-atlas-of-human-and-mouse-white-adipose-tissue?filename=Mm.metadata.tsv
+#Read the metadata file----
+meta <- read.delim("metadata.tsv",sep="\t")
+```
+
+```{r}
+#Combine the full metadata with the single-cell object
+ctrl.meta = ctrl@meta.data
+ctrl.meta$cell_id = rownames(ctrl.meta)
+mm_meta = left_join(ctrl.meta, meta, by = "cell_id")
+ncol(ctrl) == nrow(mm_meta) #Check if lenghts are equal
+
+dplyr::select(mm_meta, -c("nCount_RNA", "nFeature_RNA", "orig.ident"))
+rownames(mm_meta) = mm_meta$cell_id
+ctrl@meta.data <- mm_meta
+```
+
+### Saving the file
+```{r}
+saveRDS(ctrl, "emont_mouse_seurat.rds")
+```
+
+###Loading the object
+
+```{r}
+ctrl = readRDS("emont_mouse_seurat.rds")
+```
+
+
+###PLOTTING
+```{r}
+features <- c("Opn3")
+cluster_sorted = sort(unique(ctrl$cell_type__custom))
+
+for(feat in features){
+Idents(ctrl) <- "cell_type__custom"
+unique(Idents(ctrl))
+plot <- Seurat::VlnPlot(ctrl, 
+                features = feat, 
+                raster = F) +
+  theme(axis.title.x = element_blank(),
+        plot.margin = margin(l =  1.5, unit = "cm"))
+exp_order = plot[[1]]$data %>%
+  group_by(ident) %>%
+  summarise(avg_exp = mean(!!sym(feat))) %>%
+  arrange(desc(avg_exp)) %>%
+  pull(ident)
+
+plot = plot + scale_x_discrete(limits = exp_order) + NoLegend()
+print(plot)
+
+ggsave(paste0("./figures/VlnPlot_", feat, "_all_cells.png"), plot = plot, device = "png", width = 10, height = 8, dpi = 600)
+}
+```
+#DotPlot
+
+###PLOTTING
+```{r}
+library(ggplot2)
+library(ggpubr)
+
+features <- c("Opn1mw","Opn1sw","Opn3", "Opn4", "Opn5")
+cluster_sorted = sort(unique(ctrl$cell_type__custom))
+
+#Plot all clusters by BMI  
+Idents(ctrl) <- "cell_type__custom"
+unique(Idents(ctrl))
+plot <- Seurat::DotPlot(ctrl, 
+                features = features, 
+                # split.by = "bmi__group", 
+                ) 
+plot
+dotplot_data = plot$data
+dir.create("./data")
+
+#Write dot plot. This will also be used to generate the boxplot
+write.csv(dotplot_data, paste0("./data/DotPlot_Opn.csv"), row.names = F)
+```
+
+```{r}
+sessionInfo()
+```
+
