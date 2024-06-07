@@ -3,13 +3,10 @@ output:
   pdf_document: default
   html_document: default
 ---
- university union
- ---
+
+---
 title: "R Notebook"
 output: html_notebook
-knit:
-  opts_knit:
-    root.dir: "U:/USERS/CamaraH/Projects/Opn3_scRNAseq_analysis/Emont_2022/mouse"
 ---
 
 
